@@ -6,7 +6,7 @@ A C++17 backend project simulating the retrieval step of a RAG (Retrieval-Augmen
 
 * `RateLimiter.h` — Rate limiter supporting Token Bucket, Leaky Bucket, and Fixed Window
 * `LRUCache.h` — LRU cache built using `unordered_map` + `list`
-* `SearchEngine.h` — Loads `documents.txt`, scores documents by keyword overlap
+* `SearchEngine.h` — Loads `documents.txt`, scores documents
 * `documents.txt` — Local knowledge base (one document per line)
 * `main.cpp` — CLI entry point
 
@@ -20,7 +20,7 @@ Query -> Rate Limiter -> Cache Check -> Search Engine -> Best Match -> Cache Res
 
 * Three rate limiting algorithms: Token Bucket, Leaky Bucket, Fixed Window (selectable via enum)
 * LRU cache with O(1) average get/put
-* Keyword-overlap document retrieval
+* Inverted index built at load time for efficient retrieval (maps words to document IDs, inspired by real search engines like Elasticsearch)
 
 ## Prerequisites
 
