@@ -4,7 +4,7 @@ A C++17 backend project simulating the retrieval step of a RAG (Retrieval-Augmen
 
 ## Structure
 
-* `RateLimiter.h` — Token Bucket rate limiter (per-user)
+* `RateLimiter.h` — Rate limiter supporting Token Bucket, Leaky Bucket, and Fixed Window
 * `LRUCache.h` — LRU cache built using `unordered_map` + `list`
 * `SearchEngine.h` — Loads `documents.txt`, scores documents by keyword overlap
 * `documents.txt` — Local knowledge base (one document per line)
@@ -18,7 +18,7 @@ Query -> Rate Limiter -> Cache Check -> Search Engine -> Best Match -> Cache Res
 
 ## Features
 
-* Token Bucket rate limiting with burst capacity and refill rate
+* Three rate limiting algorithms: Token Bucket, Leaky Bucket, Fixed Window (selectable via enum)
 * LRU cache with O(1) average get/put
 * Keyword-overlap document retrieval
 
@@ -43,6 +43,16 @@ are smaller and right children are larger than the parent node
 Enter query: binary search tree
 [CACHE HIT] A binary search tree maintains the property that left children
 are smaller and right children are larger than the parent node
+```
+
+## Switching Rate Limiting Algorithm
+
+In `main.cpp`, change the constructor:
+
+```cpp
+RateLimiter rateLimiter(Algorithm::TOKEN_BUCKET, 3, 1.0);
+RateLimiter rateLimiter(Algorithm::LEAKY_BUCKET, 3, 1.0);
+RateLimiter rateLimiter(Algorithm::FIXED_WINDOW, 3, 5.0);
 ```
 
 ## Future Improvements
