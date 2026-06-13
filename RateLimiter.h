@@ -3,79 +3,134 @@
 #include <bits/stdc++.h>
 using namespace std;
 
-// ---------------------------------------------------------------
-// RateLimiter
-// Implements the Token Bucket algorithm, per user.
-// ---------------------------------------------------------------
+// rate limiter with 3 algorithms, pick one when creating the object
+// TOKEN_BUCKET -> capacity = max tokens, rate = tokens added per sec
+// LEAKY_BUCKET -> capacity = max level, rate = leak rate per sec
+// FIXED_WINDOW -> capacity = max requests per window, rate = window size in sec
+
+enum class Algorithm
+{
+    TOKEN_BUCKET,
+    LEAKY_BUCKET,
+    FIXED_WINDOW
+};
 
 class RateLimiter
 {
 public:
-    RateLimiter(int capacity, double refillRate)
-        : capacity(capacity), refillRate(refillRate)
+    RateLimiter(Algorithm algo, double capacity, double rate)
+        : algo(algo), capacity(capacity), rate(rate)
     {
     }
 
-    // Checks whether the given user is allowed to make a request right now.
-    // Returns true if allowed (and consumes a token), false if rate limited.
     bool allowRequest(const string &userId)
     {
-        refill(userId);
+        if (algo == Algorithm::TOKEN_BUCKET)
+            return allowTokenBucket(userId);
+        if (algo == Algorithm::LEAKY_BUCKET)
+            return allowLeakyBucket(userId);
+        return allowFixedWindow(userId);
+    }
 
-        auto &bucket = buckets[userId];
+private:
+    Algorithm algo;
+    double capacity;
+    double rate;
 
-        if (bucket.tokens >= 1.0)
+    // bucket fills up to capacity over time, each request costs 1 token
+    // allows bursts up to capacity, then slows down
+    struct TokenBucketState
+    {
+        double tokens;
+        chrono::steady_clock::time_point lastRefillTime;
+    };
+    unordered_map<string, TokenBucketState> tokenBuckets;
+
+    bool allowTokenBucket(const string &userId)
+    {
+        auto now = chrono::steady_clock::now();
+
+        if (tokenBuckets.find(userId) == tokenBuckets.end())
+            tokenBuckets[userId] = {capacity, now};
+
+        auto &state = tokenBuckets[userId];
+
+        double elapsed = chrono::duration<double>(now - state.lastRefillTime).count();
+        state.tokens = min(capacity, state.tokens + elapsed * rate);
+        state.lastRefillTime = now;
+
+        if (state.tokens >= 1.0)
         {
-            bucket.tokens -= 1.0;
+            state.tokens -= 1.0;
             return true;
         }
 
         return false;
     }
 
-private:
-    struct Bucket
+    // water level increases by 1 per request, drains at fixed rate
+    // doesn't allow bursts like token bucket does
+    struct LeakyBucketState
     {
-        double tokens;
-        chrono::steady_clock::time_point lastRefillTime;
+        double level;
+        chrono::steady_clock::time_point lastLeakTime;
     };
+    unordered_map<string, LeakyBucketState> leakyBuckets;
 
-    int capacity;        // max tokens a bucket can hold
-    double refillRate;   // tokens added per second
-
-    unordered_map<string, Bucket> buckets;
-
-    // Refills tokens for a user based on how much time has passed
-    // since their last request.
-    void refill(const string &userId)
+    bool allowLeakyBucket(const string &userId)
     {
         auto now = chrono::steady_clock::now();
 
-        // If this is the first time we see this user, give them a full bucket.
-        if (buckets.find(userId) == buckets.end())
+        if (leakyBuckets.find(userId) == leakyBuckets.end())
+            leakyBuckets[userId] = {0.0, now};
+
+        auto &state = leakyBuckets[userId];
+
+        double elapsed = chrono::duration<double>(now - state.lastLeakTime).count();
+        state.level = max(0.0, state.level - elapsed * rate);
+        state.lastLeakTime = now;
+
+        if (state.level + 1.0 <= capacity)
         {
-            buckets[userId] = {(double)capacity, now};
-            return;
+            state.level += 1.0;
+            return true;
         }
 
-        auto &bucket = buckets[userId];
+        return false;
+    }
 
-        double elapsedSeconds = chrono::duration<double>(now - bucket.lastRefillTime).count();
+    // counts requests in current window, resets when window expires
+    // can allow up to 2x capacity near window boundaries
+    struct FixedWindowState
+    {
+        int count;
+        chrono::steady_clock::time_point windowStart;
+    };
+    unordered_map<string, FixedWindowState> fixedWindows;
 
-        double tokensToAdd = elapsedSeconds * refillRate;
+    bool allowFixedWindow(const string &userId)
+    {
+        auto now = chrono::steady_clock::now();
 
-        bucket.tokens = min((double)capacity, bucket.tokens + tokensToAdd);
-        bucket.lastRefillTime = now;
+        if (fixedWindows.find(userId) == fixedWindows.end())
+            fixedWindows[userId] = {0, now};
+
+        auto &state = fixedWindows[userId];
+
+        double elapsed = chrono::duration<double>(now - state.windowStart).count();
+
+        if (elapsed >= rate)
+        {
+            state.count = 0;
+            state.windowStart = now;
+        }
+
+        if (state.count < (int)capacity)
+        {
+            state.count++;
+            return true;
+        }
+
+        return false;
     }
 };
-// Idea:
-//   - Every user has a "bucket" that can hold up to `capacity` tokens.
-//   - Tokens refill over time at a fixed rate (`refillRate` tokens/sec).
-//   - Every request costs 1 token.
-//   - If the bucket has at least 1 token -> request allowed, consume a token.
-//   - If the bucket is empty -> request rejected (rate limited).
-//
-// Why Token Bucket?
-//   - Allows short bursts of traffic (up to `capacity` requests at once)
-//   - But smooths out traffic over time, since tokens regenerate slowly.
-//   - Easy to reason about and implement using just a timestamp + a counter.
