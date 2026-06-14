@@ -3,10 +3,10 @@
 #include <bits/stdc++.h>
 using namespace std;
 
-// rate limiter with 3 algorithms, pick one when creating the object
-// TOKEN_BUCKET -> capacity = max tokens, rate = tokens added per sec
-// LEAKY_BUCKET -> capacity = max level, rate = leak rate per sec
-// FIXED_WINDOW -> capacity = max requests per window, rate = window size in sec
+// rate limiter with 3 algorithms
+// TOKEN_BUCKET
+// LEAKY_BUCKET
+// FIXED_WINDOW
 
 enum class Algorithm
 {
@@ -38,7 +38,7 @@ private:
     double rate;
 
     // bucket fills up to capacity over time, each request costs 1 token
-    // allows bursts up to capacity, then slows down
+   
     struct TokenBucketState
     {
         double tokens;
